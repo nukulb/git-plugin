@@ -840,59 +840,46 @@ public class GitSCM extends SCM implements Serializable {
                         throw new GitException("Could not fetch from any repository");
                     }
 
-                    //if(fetched){
-                        if(newJobs){
-                            listener.getLogger().println("creating new Jobs for new branches.");
-                            String repoOrigin = ((RemoteConfig)remoteRepositories.get(0)).getName();
-                            String repoURL = git.getRemoteUrl(repoOrigin);
-                            String[] split = repoURL.split("/");
-                            String[] split2 = split[split.length-1].split("\\.");
-                            listener.getLogger().println("repoURL + "+repoURL + "   split"+split[split.length-1]+   "   split2:"+split2);
-                            String repoName = split2[0];
-                            listener.getLogger().println("repoName:"+repoName + "   repoURL:"+repoURL + "   repoOrigin:"+repoOrigin);
+                    if(newJobs){
+                        listener.getLogger().println("creating new Jobs for new branches from "+ environment.get("JOB_NAME"));
+                        String repoName = environment.get("JOB_NAME");
 
-                            //get all the branches
-                            for(Branch branchSpec : git.getBranches()){
-                                listener.getLogger().println("Branch specs:" + branchSpec.getName());
-                                String[] split3 = branchSpec.getName().split("/");
-                                String branchName;
-                                if(split3.length < 2)
-                                    branchName = split3[0];
-                                else
-                                    branchName = split3[1];
-                                listener.getLogger().println("Branch name:" + branchName);
-                                Hudson h = Hudson.getInstance();
-                                String newJobName = repoName+"-"+branchName;
-                                listener.getLogger().println("New Job Name:" + newJobName);
-                                
-                                if(h.getItem(newJobName)==null){
-                                    TopLevelItem src = h.getItem(repoName);
+                        //get all the branches
+                        for(Branch branchSpec : git.getBranches()){
+                            String[] split = branchSpec.getName().split("/");
+                            String branchName;
+                            if(split.length < 2)
+                                branchName = split[0];
+                            else
+                                branchName = split[1];
+                            Hudson h = Hudson.getInstance();
+                            String newJobName = repoName+"-"+branchName;
 
-                                    h.copy(src,newJobName);
-
-                                    Project newJobProject = null;
-                                    //get project
-                                    for(Project p : h.getProjects()){
-                                        if(p.getName().equals(newJobName)){
-                                            newJobProject = p;
-                                        }
+                            if(h.getItem(newJobName)==null){
+                                TopLevelItem src = h.getItem(repoName);
+                                h.copy(src,newJobName);
+                                Project newJobProject = null;
+                                //get project
+                                for(Project p : h.getProjects()){
+                                    if(p.getName().equals(newJobName)){
+                                        newJobProject = p;
                                     }
-                                    if(newJobProject != null){
-                                        //get SCM
-                                        GitSCM newJobSCM = (GitSCM)newJobProject.getScm();
-                                        //modify SCM
-                                        newJobSCM.setNewJobs(false);
-                                        List<BranchSpec> branches = new ArrayList<BranchSpec>();
-                                        branches.add(new BranchSpec(branchName));
-                                        newJobSCM.setBranches(branches);
-                                        newJobProject.save();
-                                        boolean scheduled = newJobProject.scheduleBuild();
-                                        listener.getLogger().println("Build Scheduled for "+newJobName+" " + scheduled);
-                                    }
+                                }
+                                if(newJobProject != null){
+                                    //get SCM
+                                    GitSCM newJobSCM = (GitSCM)newJobProject.getScm();
+                                    //modify SCM
+                                    newJobSCM.setNewJobs(false);
+                                    List<BranchSpec> branches = new ArrayList<BranchSpec>();
+                                    branches.add(new BranchSpec(branchName));
+                                    newJobSCM.setBranches(branches);
+                                    newJobProject.save();
+                                    newJobProject.scheduleBuild();
+                                    listener.getLogger().println("New Job Name created "+newJobName);
                                 }
                             }
                         }
-                    //}
+                    }
                 } else {
                     listener.getLogger().println("Cloning the remote Git repository");
 
