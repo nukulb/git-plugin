@@ -145,7 +145,7 @@ public abstract class AbstractGitTestCase extends HudsonTestCase {
             Collections.singletonList(new BranchSpec(branchString)),
             new PreBuildMergeOptions(), false, Collections.<SubmoduleConfig>emptyList(), false,
             false, new DefaultBuildChooser(), null, null, authorOrCommitter, relativeTargetDir,
-            excludedRegions, excludedUsers, localBranch, false, false, null, null, false));
+            excludedRegions, excludedUsers, localBranch, false, false,false, null, null, false));
         project.getBuildersList().add(new CaptureEnvironmentBuilder());
         return project;
     }

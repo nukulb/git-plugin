@@ -6,3 +6,6 @@ target
 *.ipr
 *.iws
 work
+.DS_Store
+run.sh
+tags
