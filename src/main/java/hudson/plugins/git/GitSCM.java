@@ -91,10 +91,8 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
-import hudson.model.TopLevelItem;
-import hudson.model.Project;
 import static hudson.Util.fixEmptyAndTrim;
-
+import hudson.model.TopLevelItem;
 /**
  * Git SCM.
  *
@@ -843,41 +841,45 @@ public class GitSCM extends SCM implements Serializable {
                     if(newJobs){
                         listener.getLogger().println("creating new Jobs for new branches from "+ environment.get("JOB_NAME"));
                         String repoName = environment.get("JOB_NAME");
+                        Hudson h = Hudson.getInstance();
+                        listener.getLogger().println("Top Level item "+ h.getItem(repoName).getClass());
+                        if(h.getItem(repoName) != null){
 
-                        //get all the branches
-                        for(Branch branchSpec : git.getBranches()){
-                            String[] split = branchSpec.getName().split("/");
-                            String branchName;
-                            if(split.length < 2)
-                                branchName = split[0];
-                            else
-                                branchName = split[1];
-                            Hudson h = Hudson.getInstance();
-                            String newJobName = repoName+"-"+branchName;
+                            //get all the branches
+                            for(Branch branchSpec : git.getBranches()){
+                                String[] split = branchSpec.getName().split("/");
+                                String branchName;
+                                if(split.length < 2)
+                                    branchName = split[0];
+                                else
+                                    branchName = split[1];
+                                String newJobName = repoName+"-"+branchName;
 
-                            if(h.getItem(newJobName)==null){
-                                TopLevelItem src = h.getItem(repoName);
-                                h.copy(src,newJobName);
-                                Project newJobProject = null;
-                                //get project
-                                for(Project p : h.getProjects()){
-                                    if(p.getName().equals(newJobName)){
-                                        newJobProject = p;
+                                if(h.getItem(newJobName)==null){
+                                    TopLevelItem src = h.getItem(repoName);
+                                    try{
+                                        h.copy(src,newJobName);
+                                        //get project
+                                        AbstractProject newJobProject  = (AbstractProject)h.getItem(newJobName);
+
+                                        if(newJobProject != null){
+                                            GitSCM newJobSCM = (GitSCM)newJobProject.getScm();
+                                            //modify SCM
+                                            newJobSCM.setNewJobs(false);
+                                            List<BranchSpec> branches = new ArrayList<BranchSpec>();
+                                            branches.add(new BranchSpec(branchName));
+                                            newJobSCM.setBranches(branches);
+                                            newJobProject.save();
+                                            newJobProject.scheduleBuild();
+                                            listener.getLogger().println("New Job Name created "+newJobName);
+                                        }
+                                    }catch(Exception e){
+                                        listener.getLogger().println("exception occured."+e.getStackTrace());
                                     }
                                 }
-                                if(newJobProject != null){
-                                    //get SCM
-                                    GitSCM newJobSCM = (GitSCM)newJobProject.getScm();
-                                    //modify SCM
-                                    newJobSCM.setNewJobs(false);
-                                    List<BranchSpec> branches = new ArrayList<BranchSpec>();
-                                    branches.add(new BranchSpec(branchName));
-                                    newJobSCM.setBranches(branches);
-                                    newJobProject.save();
-                                    newJobProject.scheduleBuild();
-                                    listener.getLogger().println("New Job Name created "+newJobName);
-                                }
-                            }
+                            } 
+                        } else {
+                            listener.getLogger().println("could not locate current project");
                         }
                     }
                 } else {
