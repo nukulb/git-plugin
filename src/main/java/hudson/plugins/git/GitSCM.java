@@ -838,50 +838,7 @@ public class GitSCM extends SCM implements Serializable {
                         throw new GitException("Could not fetch from any repository");
                     }
 
-                    if(newJobs){
-                        listener.getLogger().println("creating new Jobs for new branches from "+ environment.get("JOB_NAME"));
-                        String repoName = environment.get("JOB_NAME");
-                        Hudson h = Hudson.getInstance();
-                        listener.getLogger().println("Top Level item "+ h.getItem(repoName).getClass());
-                        if(h.getItem(repoName) != null){
-
-                            //get all the branches
-                            for(Branch branchSpec : git.getBranches()){
-                                String[] split = branchSpec.getName().split("/");
-                                String branchName;
-                                if(split.length < 2)
-                                    branchName = split[0];
-                                else
-                                    branchName = split[1];
-                                String newJobName = repoName+"-"+branchName;
-
-                                if(h.getItem(newJobName)==null){
-                                    TopLevelItem src = h.getItem(repoName);
-                                    try{
-                                        h.copy(src,newJobName);
-                                        //get project
-                                        AbstractProject newJobProject  = (AbstractProject)h.getItem(newJobName);
-
-                                        if(newJobProject != null){
-                                            GitSCM newJobSCM = (GitSCM)newJobProject.getScm();
-                                            //modify SCM
-                                            newJobSCM.setNewJobs(false);
-                                            List<BranchSpec> branches = new ArrayList<BranchSpec>();
-                                            branches.add(new BranchSpec(branchName));
-                                            newJobSCM.setBranches(branches);
-                                            newJobProject.save();
-                                            newJobProject.scheduleBuild();
-                                            listener.getLogger().println("New Job Name created "+newJobName);
-                                        }
-                                    }catch(Exception e){
-                                        listener.getLogger().println("exception occured."+e.getStackTrace());
-                                    }
-                                }
-                            } 
-                        } else {
-                            listener.getLogger().println("could not locate current project");
-                        }
-                    }
+                    
                 } else {
                     listener.getLogger().println("Cloning the remote Git repository");
 
@@ -1395,13 +1352,59 @@ public class GitSCM extends SCM implements Serializable {
         final EnvVars environment = GitUtils.getPollEnvironment(project, workspace, launcher, listener);
         final List<RemoteConfig> paramRepos = getParamExpandedRepos(lastBuild);
         final String singleBranch = GitUtils.getSingleBranch(lastBuild, getRepositories(), getBranches());
+        final String jobName = project.getName();
 
         boolean pollChangesResult = workingDirectory.act(new FileCallable<Boolean>() {
             private static final long serialVersionUID = 1L;
 
             public Boolean invoke(File localWorkspace, VirtualChannel channel) throws IOException {
                 IGitAPI git = new GitAPI(gitExe, new FilePath(localWorkspace), listener, environment);
-
+                if(newJobs){
+                    Hudson h = Hudson.getInstance();
+                    if(h.getItem(jobName) != null){
+                        //get all the branches
+                        for(Branch branchSpec : git.getBranches()){
+                            String[] split = branchSpec.getName().split("/");
+                            String branchName;
+                            if(split.length < 2){
+                                branchName = split[0];
+                            }else{
+                                branchName = split[1];
+                            }
+                            String newJobName = jobName+"-"+branchName;
+                            //find branches already being built by this scm.
+                            boolean branchAlreadyBeingBuilt = false;
+                            for(BranchSpec currentBranchBeingBuilt : getBranches()){
+                                if(branchName.equals(currentBranchBeingBuilt.getName())
+                                        || branchSpec.getName().equals(currentBranchBeingBuilt.getName())
+                                        || branchSpec.getName().equals("master")){
+                                   branchAlreadyBeingBuilt = true;
+                                }
+                            }
+                            if(h.getItem(newJobName)==null && !branchAlreadyBeingBuilt){
+                                TopLevelItem src = h.getItem(jobName);
+                                try{
+                                    h.copy(src,newJobName);
+                                    //get project
+                                    AbstractProject newJobProject  = (AbstractProject)h.getItem(newJobName);
+                                    if(newJobProject != null){
+                                        GitSCM newJobSCM = (GitSCM)newJobProject.getScm();
+                                        //modify SCM
+                                        newJobSCM.setNewJobs(false);
+                                        List<BranchSpec> branches = new ArrayList<BranchSpec>();
+                                        branches.add(new BranchSpec(branchName));
+                                        newJobSCM.setBranches(branches);
+                                        newJobProject.save();
+                                        newJobProject.scheduleBuild();
+                                        listener.getLogger().println("New Job Name created "+newJobName);
+                                    }
+                                }catch(Exception e){
+                                    listener.getLogger().println("exception occured, could not create job called");
+                                }
+                            }
+                        } 
+                    }
+                }
                 if (git.hasGitRepo()) {
                     // Repo is there - do a fetch
                     listener.getLogger().println("Fetching changes from the remote Git repositories");
