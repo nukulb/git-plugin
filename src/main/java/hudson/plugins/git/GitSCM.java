@@ -1352,7 +1352,6 @@ public class GitSCM extends SCM implements Serializable {
         final EnvVars environment = GitUtils.getPollEnvironment(project, workspace, launcher, listener);
         final List<RemoteConfig> paramRepos = getParamExpandedRepos(lastBuild);
         final String singleBranch = GitUtils.getSingleBranch(lastBuild, getRepositories(), getBranches());
-        final String jobName = project.getName();
 
         boolean pollChangesResult = workingDirectory.act(new FileCallable<Boolean>() {
             private static final long serialVersionUID = 1L;
@@ -1360,6 +1359,8 @@ public class GitSCM extends SCM implements Serializable {
             public Boolean invoke(File localWorkspace, VirtualChannel channel) throws IOException {
                 IGitAPI git = new GitAPI(gitExe, new FilePath(localWorkspace), listener, environment);
                 if(newJobs){
+                    final String jobName = environment.get("JOB_NAME");
+                    listener.getLogger().println("Checking if new jobs are needed for "+jobName);
                     Hudson h = Hudson.getInstance();
                     if(h.getItem(jobName) != null){
                         //get all the branches
@@ -1399,7 +1400,8 @@ public class GitSCM extends SCM implements Serializable {
                                         listener.getLogger().println("New Job Name created "+newJobName);
                                     }
                                 }catch(Exception e){
-                                    listener.getLogger().println("exception occured, could not create job called");
+                                    listener.getLogger().println("exception occured, could not create job called "+ e.getMessage());
+                                    e.printStackTrace();
                                 }
                             }
                         } 

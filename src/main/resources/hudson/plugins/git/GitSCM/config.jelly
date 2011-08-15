@@ -129,7 +129,7 @@
 	  	
 	  </f:entry>
           
-        <f:entry title="Create new Hudson Jobs for all other git branches" help="/plugin/git/prune.html">
+        <f:entry title="Create new Hudson Jobs for all other git branches" help="/plugin/git/help-jobsForBranches.html">
             <f:checkbox name="git.newJobs" checked="${scm.newJobs}" />
           </f:entry>
           
