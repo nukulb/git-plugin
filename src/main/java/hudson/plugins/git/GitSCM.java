@@ -93,6 +93,8 @@ import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
 import static hudson.Util.fixEmptyAndTrim;
 import hudson.model.TopLevelItem;
+import hudson.security.ACL;
+import org.acegisecurity.context.SecurityContextHolder;
 /**
  * Git SCM.
  *
@@ -1385,6 +1387,7 @@ public class GitSCM extends SCM implements Serializable {
                             if(h.getItem(newJobName)==null && !branchAlreadyBeingBuilt){
                                 TopLevelItem src = h.getItem(jobName);
                                 try{
+                                    SecurityContextHolder.getContext().setAuthentication(ACL.SYSTEM);
                                     h.copy(src,newJobName);
                                     //get project
                                     AbstractProject newJobProject  = (AbstractProject)h.getItem(newJobName);
