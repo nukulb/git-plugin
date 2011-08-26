@@ -1360,56 +1360,6 @@ public class GitSCM extends SCM implements Serializable {
 
             public Boolean invoke(File localWorkspace, VirtualChannel channel) throws IOException {
                 IGitAPI git = new GitAPI(gitExe, new FilePath(localWorkspace), listener, environment);
-                if(newJobs){
-                    final String jobName = environment.get("JOB_NAME");
-                    listener.getLogger().println("Checking if new jobs are needed for "+jobName);
-                    Hudson h = Hudson.getInstance();
-                    if(h.getItem(jobName) != null){
-                        //get all the branches
-                        for(Branch branchSpec : git.getBranches()){
-                            String[] split = branchSpec.getName().split("/");
-                            String branchName;
-                            if(split.length < 2){
-                                branchName = split[0];
-                            }else{
-                                branchName = split[1];
-                            }
-                            String newJobName = jobName+"-"+branchName;
-                            //find branches already being built by this scm.
-                            boolean branchAlreadyBeingBuilt = false;
-                            for(BranchSpec currentBranchBeingBuilt : getBranches()){
-                                if(branchName.equals(currentBranchBeingBuilt.getName())
-                                        || branchSpec.getName().equals(currentBranchBeingBuilt.getName())
-                                        || branchSpec.getName().equals("master")){
-                                   branchAlreadyBeingBuilt = true;
-                                }
-                            }
-                            if(h.getItem(newJobName)==null && !branchAlreadyBeingBuilt){
-                                TopLevelItem src = h.getItem(jobName);
-                                try{
-                                    SecurityContextHolder.getContext().setAuthentication(ACL.SYSTEM);
-                                    h.copy(src,newJobName);
-                                    //get project
-                                    AbstractProject newJobProject  = (AbstractProject)h.getItem(newJobName);
-                                    if(newJobProject != null){
-                                        GitSCM newJobSCM = (GitSCM)newJobProject.getScm();
-                                        //modify SCM
-                                        newJobSCM.setNewJobs(false);
-                                        List<BranchSpec> branches = new ArrayList<BranchSpec>();
-                                        branches.add(new BranchSpec(branchName));
-                                        newJobSCM.setBranches(branches);
-                                        newJobProject.save();
-                                        newJobProject.scheduleBuild();
-                                        listener.getLogger().println("New Job Name created "+newJobName);
-                                    }
-                                }catch(Exception e){
-                                    listener.getLogger().println("exception occured, could not create job called "+ e.getMessage());
-                                    e.printStackTrace();
-                                }
-                            }
-                        } 
-                    }
-                }
                 if (git.hasGitRepo()) {
                     // Repo is there - do a fetch
                     listener.getLogger().println("Fetching changes from the remote Git repositories");
@@ -1439,7 +1389,106 @@ public class GitSCM extends SCM implements Serializable {
                 }
             }
         });
+        
+        if(newJobs){
 
+            List<Branch> gitBranchesToDelete = workingDirectory.act(new FileCallable<List<Branch>>() {
+
+                private static final long serialVersionUID = 1L;
+
+                public List<Branch> invoke(File localWorkspace, VirtualChannel channel) throws IOException {
+                    IGitAPI git = new GitAPI(gitExe, new FilePath(localWorkspace), listener, environment);
+                    return git.getBranches();
+                }
+            });
+            List<Branch> gitCurrentBranches = workingDirectory.act(new FileCallable<List<Branch>>() {
+
+                private static final long serialVersionUID = 1L;
+
+                public List<Branch> invoke(File localWorkspace, VirtualChannel channel) throws IOException {
+                    IGitAPI git = new GitAPI(gitExe, new FilePath(localWorkspace), listener, environment);
+                    //prune all local branches in order to get latest Info
+                    for (RemoteConfig remoteRepository : paramRepos) {
+                        git.prune(remoteRepository);
+                    }
+                    return git.getBranches();
+                }
+            });
+
+            final String jobName = environment.get("JOB_NAME");
+            listener.getLogger().println("Checking if new jobs are needed for "+jobName);
+            Hudson h = Hudson.getInstance();
+
+            if(h.getItem(jobName) != null){
+                //get all the branches
+                for(Branch branchSpec : gitCurrentBranches){
+                    if(gitBranchesToDelete.remove(branchSpec)){
+                        listener.getLogger().println("Branch to not remove "+branchSpec.getName());
+                    }
+                    String[] split = branchSpec.getName().split("/");
+                    String branchName;
+                    if(split.length < 2){
+                        branchName = split[0];
+                    }else{
+                        branchName = split[1];
+                    }
+                    String newJobName = jobName+"-"+branchName;
+                    //find branches already being built by this scm.
+                    boolean branchAlreadyBeingBuilt = false;
+                    for(BranchSpec currentBranchBeingBuilt : getBranches()){
+                        if(branchName.equals(currentBranchBeingBuilt.getName())
+                                || branchSpec.getName().equals(currentBranchBeingBuilt.getName())
+                                || branchSpec.getName().equals("master")){
+                            branchAlreadyBeingBuilt = true;
+                                }
+                    }
+                    if(h.getItem(newJobName)==null && !branchAlreadyBeingBuilt){
+                        TopLevelItem src = h.getItem(jobName);
+                        try{
+                            SecurityContextHolder.getContext().setAuthentication(ACL.SYSTEM);
+                            h.copy(src,newJobName);
+                            //get project
+                            AbstractProject newJobProject  = (AbstractProject)h.getItem(newJobName);
+                            if(newJobProject != null){
+                                GitSCM newJobSCM = (GitSCM)newJobProject.getScm();
+                                //modify SCM
+                                newJobSCM.setNewJobs(false);
+                                List<BranchSpec> branches = new ArrayList<BranchSpec>();
+                                branches.add(new BranchSpec(branchName));
+                                newJobSCM.setBranches(branches);
+                                newJobProject.save();
+                                newJobProject.scheduleBuild();
+                                listener.getLogger().println("New Job Name created "+newJobName);
+                            }
+                        } catch(Exception e){
+                            listener.getLogger().println("exception occured, could not create job called "+ e.getMessage());
+                            e.printStackTrace();
+                        }
+                    }
+                } 
+            }
+            for(Branch branchSpec : gitBranchesToDelete){
+                listener.getLogger().println("Branch to remove "+branchSpec.getName());
+                String[] split = branchSpec.getName().split("/");
+                String branchName;
+                if(split.length < 2){
+                    branchName = split[0];
+                }else{
+                    branchName = split[1];
+                }
+                String jobNameToDelete = jobName+"-"+branchName;
+                TopLevelItem itemToDelete = h.getItem(jobNameToDelete);
+                if(itemToDelete != null){
+                    try{
+                        itemToDelete.delete();
+                    } catch(Exception e){
+                        listener.getLogger().println("exception occured, could not create job called "+ e.getMessage());
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+ 
         return pollChangesResult ? PollingResult.SIGNIFICANT : PollingResult.NO_CHANGES;
     }
 
